@@ -15,7 +15,7 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from openai_processor import (
+from processor import (
     process_medical_formula,
     ask_openai,
     SystemPromptGenerator
