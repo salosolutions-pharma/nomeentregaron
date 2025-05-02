@@ -2,8 +2,9 @@ import re
 import time
 import logging
 from typing import Dict, Any, Optional
-from src.models.user_session import actualizar_datos_contexto, get_user_session
-from src.services.openai_service import OpenAIService, SystemPromptGenerator
+from config import ConversationSteps
+from models.user_session import actualizar_datos_contexto, get_user_session
+from services.openai_service import OpenAIService, SystemPromptGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +36,13 @@ class IntentHandler:
         
     def mostrar_resumen_formula(self, user_session: Dict[str, Any]) -> str:
         
-        from src.config import ConversationSteps
-        
         user_session["data"]["summary_shown"] = True
         resumen = self.generar_resumen_formula(user_session["data"]["formula_data"])
         user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_MEDICAMENTOS
         user_session["data"]["conversation_history"].append({"role": "assistant", "content": resumen})
         return resumen
         
-    def 
-        from src.config import ConversationSteps
+    def generar_resumen_final(self, user_data: Dict[str, Any]) -> str:
         
         if not user_data.get("missing_meds") or user_data.get("missing_meds") == "[aún no especificado]":
             user_data["current_step"] = ConversationSteps.ESPERANDO_MEDICAMENTOS
@@ -78,7 +76,6 @@ class IntentHandler:
     
     def manejar_consentimiento(self, user_session: Dict[str, Any], text: str) -> str:
         
-        from src.config import ConversationSteps
         
         affirmative = bool(re.search(r"(si|sí|claro|ok|dale|autorizo|acepto|por supuesto|listo|adelante)", text, re.I))
         
@@ -96,7 +93,7 @@ class IntentHandler:
                 except Exception as e:
                     logger.error(f"Error al procesar fórmula pendiente: {e}")
                     user_session["data"]["pending_media"] = None
-                    from src.config import MENSAJE_FORMULA_MAL_LEIDA
+                    from config import MENSAJE_FORMULA_MAL_LEIDA
                     user_session["data"]["conversation_history"].append({"role": "assistant", "content": MENSAJE_FORMULA_MAL_LEIDA})
                     return MENSAJE_FORMULA_MAL_LEIDA
             
@@ -161,7 +158,6 @@ class IntentHandler:
     
     def get_next_question(self, user_data: Dict[str, Any]) -> Optional[str]:
         
-        from src.config import ConversationSteps
         
         if user_data["current_step"] == ConversationSteps.FORMULA_ANALIZADA and not user_data["summary_shown"]:
             return None
@@ -233,7 +229,6 @@ class IntentHandler:
     
     def procesar_respuesta_para_extraccion_datos(self, respuesta: str, user_session: Dict[str, Any]) -> None:
         
-        from src.config import ConversationSteps
         
         respuesta_lower = respuesta.lower()
         

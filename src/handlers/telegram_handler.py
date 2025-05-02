@@ -7,7 +7,7 @@ from typing import Dict, Any
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-from src.config import (
+from config import (
     ConversationSteps, 
     WELCOME_MESSAGE, 
     MENSAJE_CONSENTIMIENTO,
@@ -15,11 +15,11 @@ from src.config import (
     MENSAJE_FORMULA_PERDIDA,
     MENSAJE_SOLICITUD_FORMULA
 )
-from src.models.user_session import get_user_session, reset_session, actualizar_datos_contexto
-from src.services.openai_service import OpenAIService, SystemPromptGenerator
-from src.services.image_processor import ImageProcessor
-from src.services.bigquery_service import BigQueryService
-from src.handlers.intent_handler import IntentHandler
+from models.user_session import get_user_session, reset_session, actualizar_datos_contexto
+from services.openai_service import OpenAIService, SystemPromptGenerator
+from services.image_processor import ImageProcessor
+from services.bigquery_service import BigQueryService
+from handlers.intent_handler import IntentHandler
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,14 @@ class TelegramHandler:
         self.intent_handler = IntentHandler(openai_service)
         
     def setup_telegram_bot(self) -> Application:
-        
         application = Application.builder().token(self.telegram_token).build()
+        
+        # Configurar la eliminación del webhook para que se ejecute durante la inicialización
+        async def post_init(application: Application) -> None:
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            logger.info("Webhook eliminado correctamente")
+        
+        application.post_init = post_init
         
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
@@ -43,8 +49,11 @@ class TelegramHandler:
         application.add_handler(MessageHandler(filters.PHOTO, self.process_photo_message))
         
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_text_message))
+        
+        async def error_handler(update, context):
+            logger.error(f"Error en el bot: {context.error}")
 
-        application.add_error_handler(lambda update, context: logger.error(f"Error en el bot: {context.error}"))
+        application.add_error_handler(error_handler)
         
         return application
     
@@ -272,7 +281,7 @@ class TelegramHandler:
                 user_session["data"]["has_greeted"] = True
                 user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_FORMULA
                 
-            await update.message.reply_text(f"¡Hola! 👋 Bienvenido a No Me Entregaron.\n\n{MENSAJE_SOLICITUD_FORMULA}")
+                await update.message.reply_text(f"¡Hola! 👋 Bienvenido a No Me Entregaron.\n\n{MENSAJE_SOLICITUD_FORMULA}")
                 return
             
             if text.lower() == '/reset' or 'empezar de nuevo' in text.lower() or 'reiniciar' in text.lower():

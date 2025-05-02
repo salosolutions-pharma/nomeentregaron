@@ -1,7 +1,7 @@
 import time
 import logging
 from typing import Dict, Any
-from src.config import ConversationSteps
+from config import ConversationSteps
 
 logger = logging.getLogger(__name__)
 
