@@ -1,8 +1,11 @@
 # Archivos de entorno
 .env
 .env.*
-
-# Archivos de Python
+credentials.json
+*credentials*.json
+gcp-credentials.json
+key.json
+service-account.json
 __pycache__/
 *.py[cod]
 *$py.class

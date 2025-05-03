@@ -50,6 +50,7 @@ Devuelve un objeto JSON con esta estructura exacta:
 
 Asegúrate de incluir todos los medicamentos visibles en la imagen, sin excepción."""
 
+            # Llamamos a la API de OpenAI sin especificar el límite de tokens
             response = self.client.chat.completions.create(
                 model="o4-mini",
                 messages=[
@@ -66,8 +67,8 @@ Asegúrate de incluir todos los medicamentos visibles en la imagen, sin excepci�
                             }
                         ]
                     }
-                ],
-                max_tokens=2000
+                ]
+                # Eliminamos el parámetro max_tokens/max_completion_tokens
             )
             
             response_text = response.choices[0].message.content

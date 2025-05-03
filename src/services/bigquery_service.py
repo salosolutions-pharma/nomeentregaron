@@ -4,16 +4,30 @@ import logging
 import re
 from typing import Dict, Any
 from google.cloud import bigquery
+from google.oauth2 import service_account
 
 logger = logging.getLogger(__name__)
 
 class BigQueryService:
-    def __init__(self, project_id: str = None, dataset_id: str = None, table_id: str = None):
+    def __init__(self, project_id: str = None, dataset_id: str = None, table_id: str = None, credentials_path: str = None):
         
         self.project_id = project_id or os.getenv('BIGQUERY_PROJECT_ID')
         self.dataset_id = dataset_id or os.getenv('BIGQUERY_DATASET_ID', 'solutions2pharma_data')
         self.table_id = table_id or os.getenv('BIGQUERY_TABLE_ID', 'quejas')
-        self.client = bigquery.Client(project=self.project_id)
+        
+        try:
+            if credentials_path and os.path.exists(credentials_path):
+                # Usar credenciales desde archivo para Windows
+                logger.info(f"Usando credenciales desde archivo: {credentials_path}")
+                credentials = service_account.Credentials.from_service_account_file(credentials_path)
+                self.client = bigquery.Client(project=self.project_id, credentials=credentials)
+            else:
+                # Intentar usar credenciales del ambiente
+                logger.info("Usando credenciales del ambiente")
+                self.client = bigquery.Client(project=self.project_id)
+        except Exception as e:
+            logger.error(f"Error al inicializar el cliente BigQuery: {e}")
+            raise
         
     async def save_user_data(self, user_data: Dict[str, Any], force_save: bool = False) -> bool:
         
