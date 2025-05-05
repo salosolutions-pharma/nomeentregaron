@@ -15,8 +15,9 @@ from config import (
     MENSAJE_FORMULA_PERDIDA,
     MENSAJE_SOLICITUD_FORMULA
 )
-from models.session_manager import get_user_session, reset_session, actualizar_datos_contexto
-from services.openai_service import OpenAIService, SystemPromptGenerator
+from models.session_manager import get_user_session, reset_session, actualizar_datos_contexto, iniciar_nueva_queja
+from services.openai_service import OpenAIService
+from core.prompt_generator import SystemPromptGenerator
 from services.image_processor import ImageProcessor
 from services.bigquery_service import BigQueryService
 from handlers.intent_handler import IntentHandler
@@ -132,34 +133,12 @@ class TelegramHandler:
             envia_imagen_despues_de_completar = user_session["data"]["current_step"] == ConversationSteps.COMPLETADO
 
             if envia_imagen_despues_de_completar:
+                # Guardar los datos de la queja completada si no están guardados
                 if user_session["data"].get("formula_data") and not user_session["data"]["queja_actual"]["guardada"]:
                     await self.bigquery_service.save_user_data(user_session["data"], True)
 
-                # Reiniciamos para una nueva queja
-                user_session["data"]["queja_actual"] = {
-                    "id": f"{user_id}_{int(time.time())}",
-                    "guardada": False
-                }
-
-                user_session["data"]["city"] = ''
-                user_session["data"]["eps"] = ''
-                user_session["data"]["formula_data"] = None
-                user_session["data"]["missing_meds"] = None
-                user_session["data"]["summary_shown"] = False
-                user_session["data"]["birth_date"] = ''
-                user_session["data"]["affiliation_regime"] = ''
-                user_session["data"]["residence_address"] = ''
-                user_session["data"]["pharmacy"] = ''
-                user_session["data"]["pharmacy_branch"] = ''
-                user_session["data"]["cellphone"] = ''
-                user_session["data"]["data_collected"] = {
-                    "ciudad": False,
-                    "fecha_nacimiento": False,
-                    "regimen": False,
-                    "direccion": False,
-                    "farmacia": False,
-                    "celular": False
-                }
+                # Usar la nueva función para iniciar una nueva queja
+                iniciar_nueva_queja(user_session, user_id)
 
             # Procesamiento estándar de la imagen
             user_session["data"]["awaiting_approval"] = True
@@ -226,31 +205,12 @@ class TelegramHandler:
             # Detectar nueva queja
             es_nueva_queja = re.search(r"(nueva queja|otra queja|quiero hacer otra|iniciar otra|tramitar otra|otra .*queja|reportar otro|denunciar otro|otro medicamento no entregado|volver a empezar)", text, re.I)
             if es_nueva_queja:
+                # Guardar los datos de la queja actual si no están guardados
                 if user_session["data"].get("formula_data") and not user_session["data"]["queja_actual"]["guardada"]:
                     await self.bigquery_service.save_user_data(user_session["data"], True)
                 
-                # Reiniciar para una nueva queja
-                user_session["data"]["queja_actual"] = {"id": f"{user_id}_{int(time.time())}", "guardada": False}
-                user_session["data"]["city"] = ''
-                user_session["data"]["eps"] = ''
-                user_session["data"]["formula_data"] = None
-                user_session["data"]["missing_meds"] = None
-                user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_FORMULA
-                user_session["data"]["summary_shown"] = False
-                user_session["data"]["birth_date"] = ''
-                user_session["data"]["affiliation_regime"] = ''
-                user_session["data"]["residence_address"] = ''
-                user_session["data"]["pharmacy"] = ''
-                user_session["data"]["pharmacy_branch"] = ''
-                user_session["data"]["cellphone"] = ''
-                user_session["data"]["data_collected"] = {
-                    "ciudad": False,
-                    "fecha_nacimiento": False,
-                    "regimen": False,
-                    "direccion": False,
-                    "farmacia": False,
-                    "celular": False
-                }
+                # Usar la nueva función para iniciar una nueva queja
+                iniciar_nueva_queja(user_session, user_id)
 
                 await update.message.reply_text("¡Claro! 👍 Vamos a tramitar una nueva queja. Por favor, envíame una foto de tu fórmula médica para comenzar. 📋📸")
                 return

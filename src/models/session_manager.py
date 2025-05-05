@@ -107,6 +107,43 @@ def reset_session(user_session: Dict[str, Any]) -> None:
         "quejas_anteriores": previous_quejas
     }
 
+def iniciar_nueva_queja(user_session: Dict[str, Any], user_id: str) -> None:
+    """Reinicia los datos para una nueva queja manteniendo la información básica del usuario"""
+    
+    # Guardar la queja actual en el historial si existe
+    if user_session["data"].get("formula_data") and not user_session["data"]["queja_actual"].get("guardada", False):
+        if "quejas_anteriores" not in user_session["data"]:
+            user_session["data"]["quejas_anteriores"] = []
+        user_session["data"]["quejas_anteriores"].append(user_session["data"]["queja_actual"])
+    
+    # Reiniciamos para una nueva queja
+    user_session["data"]["queja_actual"] = {
+        "id": f"{user_id}_{int(time.time())}",
+        "guardada": False
+    }
+
+    user_session["data"]["city"] = ''
+    user_session["data"]["eps"] = ''
+    user_session["data"]["formula_data"] = None
+    user_session["data"]["missing_meds"] = None
+    user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_FORMULA
+    user_session["data"]["summary_shown"] = False
+    user_session["data"]["birth_date"] = ''
+    user_session["data"]["affiliation_regime"] = ''
+    user_session["data"]["residence_address"] = ''
+    user_session["data"]["pharmacy"] = ''
+    user_session["data"]["pharmacy_branch"] = ''
+    user_session["data"]["cellphone"] = ''
+    user_session["data"]["data_collected"] = {
+        "ciudad": False,
+        "fecha_nacimiento": False,
+        "regimen": False,
+        "direccion": False,
+        "farmacia": False,
+        "celular": False
+    }
+    user_session["data"]["last_interaction"] = time.time()
+
 def actualizar_datos_contexto(user_session: Dict[str, Any], tipo: str, valor: str) -> None:
     
     if not valor or not valor.strip():
