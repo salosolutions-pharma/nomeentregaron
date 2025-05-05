@@ -3,7 +3,7 @@ import time
 import logging
 from typing import Dict, Any, Optional, List
 from config import ConversationSteps
-from models.session_manager import actualizar_datos_contexto
+from core.session_manager import actualizar_datos_contexto
 
 logger = logging.getLogger(__name__)
 

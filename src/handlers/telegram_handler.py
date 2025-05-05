@@ -15,7 +15,7 @@ from config import (
     MENSAJE_FORMULA_PERDIDA,
     MENSAJE_SOLICITUD_FORMULA
 )
-from models.session_manager import get_user_session, reset_session, actualizar_datos_contexto, iniciar_nueva_queja
+from core.session_manager import get_user_session, reset_session, actualizar_datos_contexto, iniciar_nueva_queja
 from services.openai_service import OpenAIService
 from core.prompt_generator import SystemPromptGenerator
 from services.image_processor import ImageProcessor
