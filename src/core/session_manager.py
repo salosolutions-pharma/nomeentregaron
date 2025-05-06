@@ -26,6 +26,7 @@ def get_user_session(user_id: str) -> Dict[str, Any]:
                 "current_step": ConversationSteps.INICIO,
                 "awaiting_approval": False,
                 "context_variables": {},
+                "is_first_interaction": True,  # Add this flag
                 "has_greeted": False,
                 "summary_shown": False,
                 "last_processed_time": None,

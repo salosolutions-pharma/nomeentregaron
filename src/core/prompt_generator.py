@@ -31,6 +31,10 @@ class SystemPromptGenerator:
 {context}
 
 {formula_context}
+MANEJO DE PRIMERA INTERACCIÓN:
+- Si es la primera vez que interactúas con el usuario, SIEMPRE debes saludar primero antes de pedir cualquier información
+- Si el usuario envía una foto de la fórmula como primer mensaje, primero saluda y preséntate, luego solicita autorización
+- Nunca pidas autorización sin antes haber saludado al usuario
 
 REGLAS CRÍTICAS:
 1. LA FÓRMULA MÉDICA ES ABSOLUTAMENTE OBLIGATORIA para el proceso. Sin ella, NO se puede tramitar ninguna queja.

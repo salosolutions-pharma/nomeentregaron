@@ -7,6 +7,15 @@ from core.session_manager import actualizar_datos_contexto, get_user_session
 from services.openai_service import OpenAIService
 from core.prompt_generator import SystemPromptGenerator
 from core.data_extractor import DataExtractor
+# At the top of your file, ensure the import is correct
+from config import (
+    ConversationSteps, 
+    WELCOME_MESSAGE,  # Make sure this import exists and is not commented out
+    MENSAJE_CONSENTIMIENTO,
+    MENSAJE_FORMULA_MAL_LEIDA,
+    MENSAJE_FORMULA_PERDIDA,
+    MENSAJE_SOLICITUD_FORMULA
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +276,21 @@ class IntentHandler:
             user_session["data"]["context_variables"]["medicamentos_array"] = medicamentos
     def manejar_consentimiento(self, user_session: Dict[str, Any], text: str) -> str:
         """Maneja la respuesta del usuario al solicitar consentimiento para procesar sus datos"""
+        
+        # Check if we've greeted the user yet
+        if not user_session["data"].get("has_greeted", False):
+            user_session["data"]["has_greeted"] = True
+            user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_CONSENTIMIENTO
+            
+            # Add the welcome message and then continue with consent handling
+            welcome_message = WELCOME_MESSAGE
+            user_session["data"]["conversation_history"].append({
+                "role": "assistant",
+                "content": welcome_message
+            })
+            
+            # Continue with normal consent flow after ensuring greeting
+            logger.info("Primera interacción detectada durante solicitud de consentimiento - saludando primero")
         
         affirmative = bool(re.search(r"(si|sí|claro|ok|dale|autorizo|acepto|por supuesto|listo|adelante)", text, re.I))
         

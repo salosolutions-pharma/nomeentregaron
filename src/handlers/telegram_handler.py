@@ -121,6 +121,25 @@ class TelegramHandler:
                 logger.info("Ignorando imagen duplicada exacta")
                 return
 
+            # Check if this is the first interaction - greeting needed
+            if not user_session["data"].get("has_greeted", False):
+                logger.info("Primera interacción detectada - enviando saludo inicial")
+                user_session["data"]["has_greeted"] = True
+                user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_FORMULA
+                
+                # Send welcome message first
+                await update.message.reply_text(WELCOME_MESSAGE, parse_mode="Markdown")
+                
+                # Add greeting to conversation history
+                user_session["data"]["conversation_history"].append({
+                    "role": "assistant",
+                    "content": WELCOME_MESSAGE
+                })
+                
+                # Small delay to ensure messages appear in correct order
+                import asyncio
+                await asyncio.sleep(1)
+
             user_session["data"]["last_processed_time"] = current_time
             user_session["data"]["last_photo_id"] = current_photo_id
 
