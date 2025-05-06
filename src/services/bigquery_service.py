@@ -30,7 +30,7 @@ class BigQueryService:
             raise
         
     async def save_user_data(self, user_data: Dict[str, Any], force_save: bool = False) -> bool:
-        
+    
         try:
             datos_obligatorios_completos = (
                 user_data.get("formula_data") and
@@ -90,12 +90,41 @@ class BigQueryService:
                 
                 if not errors:
                     user_data["queja_actual"]["guardada"] = True
+                    
+                    # Guardar esta queja en el historial general
+                    if "quejas_anteriores" not in user_data:
+                        user_data["quejas_anteriores"] = []
+                        
                     user_data["quejas_anteriores"].append({
                         "id": user_data["queja_actual"]["id"],
                         "fecha": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "paciente": nombre_paciente,
                         "medicamentos": user_data.get("missing_meds", "")
                     })
+                    
+                    # Guardar información en el historial del paciente
+                    paciente_id = user_data.get("formula_data", {}).get("numero_documento", "")
+                    
+                    if paciente_id:
+                        if "patient_history" not in user_data:
+                            user_data["patient_history"] = {}
+                            
+                        if paciente_id not in user_data["patient_history"]:
+                            user_data["patient_history"][paciente_id] = {
+                                "nombre": nombre_paciente,
+                                "quejas": []
+                            }
+                        
+                        # Guardar esta queja en el historial del paciente
+                        user_data["patient_history"][paciente_id]["quejas"].append({
+                            "id": user_data["queja_actual"]["id"],
+                            "fecha": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "medicamentos": user_data.get("missing_meds", ""),
+                            "eps": user_data.get("formula_data", {}).get("eps", ""),
+                            "diagnostico": user_data.get("formula_data", {}).get("diagnostico", "")
+                        })
+                        
+                        logger.info(f"✅ Historial de paciente actualizado para: {nombre_paciente}")
 
                     logger.info(f"✅ Datos guardados correctamente en BigQuery para el paciente: {nombre_paciente}")
                     return True

@@ -3,7 +3,7 @@ import time
 import logging
 from typing import Dict, Any, Optional
 from config import ConversationSteps
-from models.session_manager import actualizar_datos_contexto, get_user_session
+from core.session_manager import actualizar_datos_contexto, get_user_session
 from services.openai_service import OpenAIService
 from core.prompt_generator import SystemPromptGenerator
 from core.data_extractor import DataExtractor
@@ -170,6 +170,31 @@ class IntentHandler:
             }
 
     def generar_resumen_formula(self, formula_data: Dict[str, Any]) -> str:
+        nombre_completo = formula_data.get("paciente", "")
+        
+        # En Colombia, el formato suele ser: APELLIDO1 APELLIDO2 NOMBRE1 NOMBRE2
+        partes_nombre = nombre_completo.split()
+        nombre_pila = ""
+        
+        if len(partes_nombre) >= 3:
+        
+            if len(partes_nombre) >= 4:
+    
+                nombre_pila = " ".join(partes_nombre[2:])
+            else:
+                nombre_pila = partes_nombre[-1]
+        elif len(partes_nombre) == 2:
+            nombre_pila = partes_nombre[-1]
+        else:
+            nombre_pila = nombre_completo
+        
+        if nombre_pila:
+            nombre_pila = nombre_pila.title()
+        
+        saludo_personalizado = f"¡Gracias por tu autorización! "
+        if nombre_pila:
+            saludo_personalizado = f"¡Gracias por tu autorización, {nombre_pila}! "
+        
         medicamentos = formula_data.get("medicamentos", [])
         medicamentos_texto = ""
         
@@ -179,7 +204,7 @@ class IntentHandler:
             medicamentos_texto = "No se identificaron medicamentos"
         
         return (
-            f"¡Gracias por tu autorización! He analizado tu fórmula médica y aquí te muestro lo que encontré:\n\n"
+            f"{saludo_personalizado}He analizado tu fórmula médica y aquí te muestro lo que encontré:\n\n"
             f"👤 Paciente: {formula_data.get('paciente', 'No visible')}\n"
             f"📄 Documento: {formula_data.get('tipo_documento', 'No visible')} {formula_data.get('numero_documento', 'No visible')}\n"
             f"🏥 EPS: {formula_data.get('eps', 'No visible')}\n"
@@ -187,7 +212,7 @@ class IntentHandler:
             f"📅 Fecha de atención: {formula_data.get('fecha_atencion', 'No visible')}\n\n"
             f"💊 Medicamentos recetados:\n{medicamentos_texto}\n\n"
             f"Por favor, dime cuáles de estos medicamentos no te entregaron."
-        )   
+        )
         
     def mostrar_resumen_formula(self, user_session: Dict[str, Any]) -> str:
         """Muestra el resumen de la fórmula y actualiza el estado de la conversación"""
@@ -223,6 +248,11 @@ class IntentHandler:
         
         user_session["data"]["formula_data"] = formula_result.get("datos", {})
         
+        # Actualizar el nombre del usuario con el de la fórmula
+        if formula_result.get("datos", {}).get("paciente"):
+            user_session["data"]["name"] = formula_result["datos"]["paciente"]
+            logger.info(f"Nombre del paciente actualizado a: {user_session['data']['name']}")
+        
         user_session["data"]["eps"] = formula_result.get("datos", {}).get("eps", "")
 
         if formula_result.get("datos", {}).get("diagnostico"):
@@ -235,7 +265,6 @@ class IntentHandler:
             
             user_session["data"]["context_variables"]["medicamentos_lista"] = medicamentos_texto
             user_session["data"]["context_variables"]["medicamentos_array"] = medicamentos
-    
     def manejar_consentimiento(self, user_session: Dict[str, Any], text: str) -> str:
         """Maneja la respuesta del usuario al solicitar consentimiento para procesar sus datos"""
         
@@ -273,3 +302,39 @@ class IntentHandler:
         """Procesa la selección de medicamentos no entregados por parte del usuario"""
         
         return await DataExtractor.procesar_seleccion_medicamentos(text, user_session)
+    
+    async def consultar_historial_paciente(self, user_session: Dict[str, Any]) -> str:
+        """Consulta el historial de quejas del paciente actual"""
+        
+        # Intentar obtener el documento del paciente actual de la fórmula
+        documento = user_session["data"].get("formula_data", {}).get("numero_documento", "")
+        
+        if not documento:
+            return "No puedo consultar el historial porque no tengo el documento del paciente. Por favor, envía primero una fórmula médica."
+        
+        # Verificar si tenemos historial para este paciente
+        if "patient_history" not in user_session["data"]:
+            user_session["data"]["patient_history"] = {}
+            
+        if documento not in user_session["data"]["patient_history"]:
+            return "No encontré quejas anteriores para este paciente en mi base de datos."
+        
+        historial = user_session["data"]["patient_history"][documento]
+        nombre_paciente = historial.get("nombre", "este paciente")
+        quejas = historial.get("quejas", [])
+        
+        if not quejas:
+            return f"No hay quejas anteriores registradas para {nombre_paciente}."
+        
+        # Generar mensaje con el historial de quejas
+        primer_nombre = nombre_paciente.split()[0] if nombre_paciente else "este paciente"
+        respuesta = f"He encontrado {len(quejas)} queja(s) anteriores para {primer_nombre}:\n\n"
+        
+        for i, queja in enumerate(quejas):
+            respuesta += f"{i+1}. Fecha: {queja['fecha']}\n"
+            respuesta += f"   Medicamentos no entregados: {queja['medicamentos']}\n"
+            respuesta += f"   EPS: {queja.get('eps', 'No registrada')}\n"
+            if i < len(quejas) - 1:
+                respuesta += "\n"
+        
+        return respuesta

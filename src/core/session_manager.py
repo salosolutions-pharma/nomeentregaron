@@ -14,7 +14,7 @@ def get_user_session(user_id: str) -> Dict[str, Any]:
             "session_id": f"telegram-session-{user_id}-{int(time.time())}",
             "data": {
                 "user_id": user_id,
-                "name": "",
+                "name": "",  # Se actualizará con el nombre del paciente de la fórmula
                 "city": "",
                 "eps": "",
                 "consented": False,
@@ -50,7 +50,8 @@ def get_user_session(user_id: str) -> Dict[str, Any]:
                     "id": f"{user_id}_{int(time.time())}",
                     "guardada": False
                 },
-                "quejas_anteriores": []
+                "quejas_anteriores": [],
+                "patient_history": {}  # Para almacenar historial por paciente
             }
         }
         logger.info(f"Nueva sesión creada para {user_id}: {user_sessions[user_id]['session_id']}")
@@ -65,10 +66,11 @@ def reset_session(user_session: Dict[str, Any]) -> None:
     previous_name = user_session["data"]["name"]
     previous_conversation_history = user_session["data"]["conversation_history"]
     previous_quejas = user_session["data"]["quejas_anteriores"] or []
+    previous_patient_history = user_session["data"].get("patient_history", {})
 
     user_session["data"] = {
         "user_id": previous_user_id,
-        "name": previous_name,
+        "name": previous_name,  # Mantener el nombre previo (si existe)
         "city": "",
         "eps": "",
         "consented": True,
@@ -104,7 +106,8 @@ def reset_session(user_session: Dict[str, Any]) -> None:
             "id": f"{previous_user_id}_{int(time.time())}",
             "guardada": False
         },
-        "quejas_anteriores": previous_quejas
+        "quejas_anteriores": previous_quejas,
+        "patient_history": previous_patient_history  # Mantener el historial de pacientes
     }
 
 def iniciar_nueva_queja(user_session: Dict[str, Any], user_id: str) -> None:
@@ -115,6 +118,9 @@ def iniciar_nueva_queja(user_session: Dict[str, Any], user_id: str) -> None:
         if "quejas_anteriores" not in user_session["data"]:
             user_session["data"]["quejas_anteriores"] = []
         user_session["data"]["quejas_anteriores"].append(user_session["data"]["queja_actual"])
+    
+    # Guardamos el nombre del paciente actual antes de reiniciar
+    previous_name = user_session["data"].get("name", "")
     
     # Reiniciamos para una nueva queja
     user_session["data"]["queja_actual"] = {
@@ -143,6 +149,10 @@ def iniciar_nueva_queja(user_session: Dict[str, Any], user_id: str) -> None:
         "celular": False
     }
     user_session["data"]["last_interaction"] = time.time()
+    
+    # Restauramos el nombre del paciente si teníamos uno
+    if previous_name:
+        user_session["data"]["name"] = previous_name
 
 def actualizar_datos_contexto(user_session: Dict[str, Any], tipo: str, valor: str) -> None:
     

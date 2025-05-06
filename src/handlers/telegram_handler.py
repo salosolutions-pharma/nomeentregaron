@@ -168,10 +168,7 @@ class TelegramHandler:
             await update.message.reply_text("Lo siento, tuve un problema al procesar tu imagen. ¿Podrías intentar enviarla de nuevo o con mejor iluminación? 📸✨")
     
     async def process_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """
-        Procesa mensajes de texto de los usuarios con un enfoque conversacional
-        utilizando el nuevo IntentHandler.
-        """
+       
         text = update.message.text or ''
         user_id = str(update.effective_user.id)
         user_session = get_user_session(user_id)
@@ -187,16 +184,22 @@ class TelegramHandler:
         user_session["data"]["last_processed_time"] = current_time
         user_session["data"]["last_message"] = text
 
-        # Actualizar información básica del usuario
-        if update.effective_user.first_name:
-            user_session["data"]["name"] = update.effective_user.first_name
-            if update.effective_user.last_name:
-                user_session["data"]["name"] += f" {update.effective_user.last_name}"
-        
+        # Solo guardamos información del usuario de Telegram temporalmente (no para uso en la conversación)
         if update.effective_user.username:
             user_session["data"]["username"] = update.effective_user.username
 
         try:
+            # Primer mensaje - Mostrar saludo inicial si no se ha mostrado antes
+            if not user_session["data"].get("has_greeted", False):
+                user_session["data"]["has_greeted"] = True
+                user_session["data"]["current_step"] = ConversationSteps.ESPERANDO_FORMULA
+                user_session["data"]["conversation_history"].append({
+                    "role": "assistant",
+                    "content": WELCOME_MESSAGE
+                })
+                await update.message.reply_text(WELCOME_MESSAGE, parse_mode="Markdown")
+                return
+                
             # Manejar comandos básicos
             if text.lower() == '/reset' or 'empezar de nuevo' in text.lower() or 'reiniciar' in text.lower():
                 await self.reset_command(update, context)
@@ -226,6 +229,18 @@ class TelegramHandler:
                 user_session["data"]["conversation_history"].append({"role": "assistant", "content": MENSAJE_FORMULA_PERDIDA})
                 await update.message.reply_text(MENSAJE_FORMULA_PERDIDA)
                 return
+                
+            # Detectar consultas de historial
+            if re.search(r"(historial|quejas anteriores|quejas previas|consultar|anteriormente)", text, re.I):
+                # Si tenemos una fórmula procesada, intentar consultar el historial
+                if user_session["data"].get("formula_data"):
+                    historial = await self.intent_handler.consultar_historial_paciente(user_session)
+                    user_session["data"]["conversation_history"].append({
+                        "role": "assistant",
+                        "content": historial
+                    })
+                    await update.message.reply_text(historial)
+                    return
 
             # Solicitud de fórmula inicial (caso especial)
             if (not user_session["data"].get("formula_data") and 

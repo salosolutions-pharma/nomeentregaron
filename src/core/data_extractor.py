@@ -128,13 +128,12 @@ class DataExtractor:
         """Procesa la selección de medicamentos no entregados"""
         texto_lower = texto.lower().strip()
         
-        # Detectar "todos" o "ninguno"
-        if texto_lower in ["ninguno", "ninguna", "ningun", "ningún"] or "no me entregaron ninguno" in texto_lower:
-            todos_los_medicamentos = ", ".join(medicamentos_array)
-            actualizar_datos_contexto(user_session, "medicamentos", todos_los_medicamentos)
-            return
-        
-        if texto_lower in ["todos", "todo"] or "todos los" in texto_lower or "no me entregaron nada" in texto_lower:
+        # Detectar "ninguno" o "todos" - ambos significan que no entregaron ninguno
+        if (texto_lower in ["ninguno", "ninguna", "ningun", "ningún", "todos", "todo"] or 
+            "no me entregaron ninguno" in texto_lower or 
+            "todos los" in texto_lower or 
+            "no me entregaron nada" in texto_lower):
+            
             todos_los_medicamentos = ", ".join(medicamentos_array)
             actualizar_datos_contexto(user_session, "medicamentos", todos_los_medicamentos)
             return
