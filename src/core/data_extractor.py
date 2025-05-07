@@ -18,7 +18,7 @@ class DataExtractor:
             "horas" in respuesta.lower() and 
             "tramitaremos" in respuesta.lower() and 
             "queja" in respuesta.lower()):
-            user_session["data"]["current_step"] = ConversationSteps.COMPLETADO
+            user_session["data"]["process_completed"] = True
             logger.info("Conversación marcada como COMPLETADA")
             
         # Extraer datos usando procesamiento de lenguaje natural
@@ -28,16 +28,14 @@ class DataExtractor:
     def extraer_datos_de_mensaje_usuario(texto: str, user_session: Dict[str, Any]) -> None:
         """Extrae información relevante del mensaje del usuario"""
         
-        # Procesar medicamentos no entregados si estamos en ese paso
-        if user_session["data"]["current_step"] == ConversationSteps.ESPERANDO_MEDICAMENTOS:
+        # Procesar medicamentos no entregados si tenemos medicamentos disponibles
+        if user_session["data"].get("context_variables", {}).get("medicamentos_array"):
             medicamentos_array = user_session["data"]["context_variables"].get("medicamentos_array", [])
             
-            # Si no hay medicamentos para seleccionar, no hacemos nada
-            if not medicamentos_array:
-                return
-                
-            # Detectar si mencionó medicamentos específicos o "todos"/"ninguno"
-            DataExtractor._procesar_seleccion_medicamentos(texto, medicamentos_array, user_session)
+            # Si hay medicamentos para seleccionar
+            if medicamentos_array:
+                # Detectar si mencionó medicamentos específicos o "todos"/"ninguno"
+                DataExtractor._procesar_seleccion_medicamentos(texto, medicamentos_array, user_session)
         
         # Extraer otros datos relevantes (ciudad, teléfono, etc.)
         DataExtractor._extraer_datos_con_patrones(texto, user_session)
@@ -57,11 +55,38 @@ class DataExtractor:
             "fecha_nacimiento": r"(?:nacimiento|nació)[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})"
         }
         
+        # Valores de palabras no válidas para ciertos campos
+        palabras_invalidas = {
+            "ciudad": ["contributivo", "subsidiado", "ese fue"],
+            "farmacia": ["donde no te", "y la sede donde", "donde te", "sede", "y debían", "debían"]
+        }
+        
         # Buscar cada patrón en el texto
         for campo, patron in patrones.items():
             match = re.search(patron, texto, re.I)
             if match and match.group(1) and len(match.group(1).strip()) > 2:
                 valor = match.group(1).strip()
+                
+                # Validar valores según el campo
+                if campo == "ciudad":
+                    # Verificar que no sea un régimen u otro valor inválido
+                    if any(palabra in valor.lower() for palabra in palabras_invalidas["ciudad"]):
+                        logger.info(f"Ignorando valor inválido para ciudad: {valor}")
+                        continue
+                
+                if campo == "farmacia":
+                    # Limpiar palabras problemáticas
+                    valor_original = valor
+                    for patron_invalido in palabras_invalidas["farmacia"]:
+                        valor = re.sub(patron_invalido, "", valor, flags=re.I).strip()
+                    
+                    if valor != valor_original:
+                        logger.info(f"Limpiando valor de farmacia: '{valor_original}' -> '{valor}'")
+                    
+                    # Si después de limpiar queda una palabra muy corta o vacía, ignorar
+                    if len(valor) < 3:
+                        logger.info(f"Ignorando valor demasiado corto para farmacia: '{valor}'")
+                        continue
                 
                 # Mapeo de campos al formato esperado por actualizar_datos_contexto
                 campo_map = {
@@ -78,10 +103,11 @@ class DataExtractor:
         
         # Extraer ciudad directamente si parece ser solo un nombre de ciudad
         ciudad_simple = re.match(r"^([A-Za-zÁáÉéÍíÓóÚúÜüÑñ\s]{3,})$", texto.strip())
-        if (ciudad_simple and 
-            user_session["data"]["current_step"] == ConversationSteps.ESPERANDO_CIUDAD and
-            not user_session["data"].get("city")):
-            actualizar_datos_contexto(user_session, "ciudad", ciudad_simple.group(1).strip())
+        if ciudad_simple:
+            valor_ciudad = ciudad_simple.group(1).strip()
+            # Validar que no sea un régimen u otro valor inválido
+            if not any(palabra in valor_ciudad.lower() for palabra in palabras_invalidas["ciudad"]):
+                actualizar_datos_contexto(user_session, "ciudad", valor_ciudad)
         
         # Extraer número de teléfono directo
         telefono_directo = re.search(r"\b(\d{10})\b", texto)
@@ -106,13 +132,23 @@ class DataExtractor:
             nuevo_valor = correccion.group(2).strip()
             
             if "ciudad" in campo or "vivo" in campo:
-                actualizar_datos_contexto(user_session, "ciudad", nuevo_valor)
+                # Validar que no sea un régimen
+                if not any(palabra in nuevo_valor.lower() for palabra in palabras_invalidas["ciudad"]):
+                    actualizar_datos_contexto(user_session, "ciudad", nuevo_valor)
             elif "celular" in campo or "teléfono" in campo or "numero" in campo or "número" in campo:
                 actualizar_datos_contexto(user_session, "celular", nuevo_valor)
             elif "direccion" in campo or "dirección" in campo or "vivo" in campo:
                 actualizar_datos_contexto(user_session, "direccion", nuevo_valor)
             elif "farmacia" in campo:
-                actualizar_datos_contexto(user_session, "farmacia", nuevo_valor)
+                # Limpiar valor de farmacia
+                valor_limpio = nuevo_valor
+                for patron_invalido in palabras_invalidas["farmacia"]:
+                    valor_limpio = re.sub(patron_invalido, "", valor_limpio, flags=re.I).strip()
+                
+                if len(valor_limpio) >= 3:
+                    actualizar_datos_contexto(user_session, "farmacia", valor_limpio)
+                else:
+                    logger.info(f"Ignorando valor demasiado corto para farmacia: '{valor_limpio}'")
             elif "nacimiento" in campo or "nací" in campo:
                 fecha_corregida = DataExtractor.extraer_fecha(nuevo_valor)
                 if fecha_corregida:

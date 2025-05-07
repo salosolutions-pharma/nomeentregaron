@@ -18,6 +18,7 @@ class ConversationSteps(Enum):
     ESPERANDO_FARMACIA = auto()
     COMPLETADO = auto()
 
+# Mensajes predefinidos que serán reemplazados por respuestas generadas por la IA
 WELCOME_MESSAGE = "¡Hola! 👋 Bienvenido a *No Me Entregaron*. \n\nSoy tu asistente virtual y estoy aquí para ayudarte a radicar quejas cuando no te entregan tus medicamentos en la EPS. 💊\n\nPor favor envíame una foto clara de tu fórmula médica. 📋📸"
 MENSAJE_CONSENTIMIENTO = "Para leer tu fórmula y ayudarte, necesito tu autorización. ¿Me autorizas a procesar tus datos para tramitar la queja? (Responde sí o no) 📝"
 MENSAJE_FORMULA_MAL_LEIDA = "No pude leer bien la fórmula. 🔍❌ ¿Podrías enviarme una foto más clara por favor? Necesito que la imagen esté bien iluminada y enfocada. 📸✨"

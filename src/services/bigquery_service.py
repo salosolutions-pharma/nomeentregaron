@@ -25,13 +25,26 @@ class BigQueryService:
                 # Intentar usar credenciales del ambiente
                 logger.info("Usando credenciales del ambiente")
                 self.client = bigquery.Client(project=self.project_id)
+                
+            # Verificar conexión con BigQuery
+            self._verificar_conexion()
         except Exception as e:
             logger.error(f"Error al inicializar el cliente BigQuery: {e}")
             raise
+    
+    def _verificar_conexion(self):
+        """Verifica que la conexión a BigQuery esté funcionando y que la tabla exista"""
+        try:
+            table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
+            self.client.get_table(table_ref)
+            logger.info(f"✅ Conexión a BigQuery verificada. Tabla {table_ref} accesible.")
+        except Exception as e:
+            logger.error(f"⚠️ Error verificando conexión a BigQuery: {e}")
+            raise
         
     async def save_user_data(self, user_data: Dict[str, Any], force_save: bool = False) -> bool:
-    
         try:
+            # Comprobar si tenemos los datos mínimos necesarios
             datos_obligatorios_completos = (
                 user_data.get("formula_data") and
                 user_data.get("missing_meds") and
@@ -44,6 +57,7 @@ class BigQueryService:
 
             logger.info("Preparando datos para BigQuery...")
 
+            # Formatear fecha de atención
             fecha_atencion = None
             if user_data.get("formula_data", {}).get("fecha_atencion"):
                 fecha_parts = user_data["formula_data"]["fecha_atencion"].split('/')
@@ -53,7 +67,34 @@ class BigQueryService:
 
             nombre_paciente = user_data.get("formula_data", {}).get("paciente", "No disponible")
             logger.info(f"Nombre del paciente desde la fórmula: {nombre_paciente}")
+            
+            # Limpiar los datos antes de guardarlos
+            city = user_data.get("city", "")
+            if city.lower() in ["contributivo", "subsidiado", "ese fue"]:
+                city = "No disponible"
+            
+            pharmacy = user_data.get("pharmacy", "")
+            # Limpiar valores de farmacia
+            pharmacy = re.sub(r'donde.*te|y la sede donde|donde no te|sede|y\s+debían|debían', '', pharmacy, flags=re.I).strip()
+            if not pharmacy or pharmacy.lower() in ["y", "la", "el", "los", "las", "donde"]:
+                pharmacy = "No disponible"
+            
+            logger.info(f"Ciudad original: {user_data.get('city', '')}, Ciudad limpia: {city}")
+            logger.info(f"Farmacia original: {user_data.get('pharmacy', '')}, Farmacia limpia: {pharmacy}")
+            
+            # Crear un ID único para la queja si no existe
+            if not user_data.get("queja_actual", {}).get("id"):
+                user_data["queja_actual"] = {
+                    "id": f"{user_data.get('user_id', 'unknown')}_{int(time.time())}",
+                    "guardada": False
+                }
 
+            # Verificar si la queja ya fue guardada
+            if user_data.get("queja_actual", {}).get("guardada", False):
+                logger.info(f"La queja {user_data['queja_actual']['id']} ya fue guardada anteriormente.")
+                return True
+            
+            # Preparar fila para inserción con valores depurados
             row = {
                 "PK": user_data["queja_actual"]["id"],
                 "tipo_documento": user_data.get("formula_data", {}).get("tipo_documento", "No disponible"),
@@ -70,26 +111,47 @@ class BigQueryService:
                 "fecha_nacimiento": user_data.get("birth_date", "No disponible"),
                 "telefono": user_data.get("cellphone", user_data.get("user_id", "No disponible")),
                 "regimen": user_data.get("affiliation_regime", "No disponible"),
-                "municipio": user_data.get("city", "No disponible"),
-                "direccion": user_data.get("residence_address", "No disponible"),
-                "farmacia": user_data.get("pharmacy", "No disponible")
+                # Usar los valores limpios
+                "municipio": city,
+                "direccion": user_data.get("residence_address", "No proporcionada"),
+                "farmacia": pharmacy
             }
-
-            if user_data["queja_actual"].get("guardada", False):
-                logger.info(f"La queja {user_data['queja_actual']['id']} ya fue guardada anteriormente.")
-                return True
                 
             table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
 
             try:
                 logger.info(f"Enviando datos a BigQuery con los campos: {list(row.keys())}")
-                logger.info(f"Datos que se enviarán: {row}")
                 
+                # Obtener referencia a la tabla
                 table = self.client.get_table(table_ref)
-                errors = self.client.insert_rows_json(table, [row])
+                
+                # Obtener esquema de la tabla
+                schema_fields = [field.name for field in table.schema]
+                logger.info(f"Campos en la tabla: {schema_fields}")
+                
+                # Filtrar campos que no existen en el esquema
+                filtered_row = {k: v for k, v in row.items() if k in schema_fields}
+                
+                # Si se filtraron campos, registrar cuáles
+                if len(filtered_row) != len(row):
+                    removed_fields = set(row.keys()) - set(filtered_row.keys())
+                    logger.warning(f"Se filtraron campos que no existen en el esquema: {removed_fields}")
+                
+                # Realizar una última verificación de valores inválidos
+                for key, value in filtered_row.items():
+                    if isinstance(value, str) and (not value.strip() or value.strip() in ["y", "la", "el", "los", "las"]):
+                        filtered_row[key] = "No disponible"
+                
+                # Insertar datos filtrados
+                logger.info("Ejecutando inserción en BigQuery...")
+                logger.info(f"Farmacia final: {filtered_row.get('farmacia', 'No disponible')}")
+                logger.info(f"Municipio final: {filtered_row.get('municipio', 'No disponible')}")
+                
+                errors = self.client.insert_rows_json(table, [filtered_row])
                 
                 if not errors:
                     user_data["queja_actual"]["guardada"] = True
+                    logger.info("✅ Datos guardados exitosamente en BigQuery!")
                     
                     # Guardar esta queja en el historial general
                     if "quejas_anteriores" not in user_data:
@@ -126,44 +188,18 @@ class BigQueryService:
                         
                         logger.info(f"✅ Historial de paciente actualizado para: {nombre_paciente}")
 
-                    logger.info(f"✅ Datos guardados correctamente en BigQuery para el paciente: {nombre_paciente}")
                     return True
                 else:
                     logger.error(f"❌ Errores al insertar en BigQuery: {errors}")
                     return False
-
+                    
             except Exception as error:
                 logger.error(f'❌ Error guardando en BigQuery: {error}')
-                
-                if hasattr(error, 'errors'):
-                    problematicos = []
-                    for err in getattr(error, 'errors', []):
-                        for detail in getattr(err, 'errors', []):
-                            match = re.search(r"no such field: ([^.]+)", getattr(detail, 'message', ''))
-                            if match and match.group(1):
-                                problematicos.append(match.group(1))
-                    
-                    if problematicos:
-                        logger.error(f"Campos problemáticos detectados: {', '.join(problematicos)}")
-                        
-                        for campo in problematicos:
-                            if campo in row:
-                                del row[campo]
-                        
-                        logger.info("Reintentando con campos corregidos:", list(row.keys()))
-                        
-                        try:
-                            errors = self.client.insert_rows_json(table, [row])
-                            if not errors:
-                                user_data["queja_actual"]["guardada"] = True
-                                logger.info("✅ Datos guardados en la tabla después de corrección")
-                                return True
-                            else:
-                                logger.error(f"❌ Error en segundo intento: {errors}")
-                        except Exception as retry_error:
-                            logger.error(f'❌ Error en segundo intento: {retry_error}')
-                
+                import traceback
+                logger.error(traceback.format_exc())
                 return False
         except Exception as e:
             logger.error(f'Error general preparando datos para BigQuery: {e}')
+            import traceback
+            logger.error(traceback.format_exc())
             return False

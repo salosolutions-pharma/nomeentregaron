@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -8,8 +8,11 @@ class SystemPromptGenerator:
         self.user_session = user_session
         
     def generate(self) -> str:
+        """
+        Genera un prompt de sistema detallado con todo el contexto necesario
+        para que el modelo de OpenAI maneje la conversación.
+        """
         user_data = self.user_session["data"]
-        current_step = str(user_data["current_step"]).split('.')[-1] if user_data.get("current_step") else "INICIO"
         
         # Construir un contexto detallado de la información del usuario
         context = self._build_user_context(user_data)
@@ -24,13 +27,23 @@ class SystemPromptGenerator:
         else:
             nombre_prompt = ""
         
-        # Construir el prompt principal
+        # Construir el prompt principal con instrucciones detalladas
         system_prompt = f"""Eres un asistente virtual conversacional llamado "No Me Entregaron" que ayuda a usuarios a radicar quejas cuando no les entregan medicamentos en su EPS en Colombia. Tu tono es amigable, empático y natural, evitando sonar robótico o seguir un guion rígido.
 
 {nombre_prompt}
 {context}
 
 {formula_context}
+
+PERSONALIDAD:
+- Eres conversacional, amable y empático. Usas emojis ocasionalmente para dar un tono amigable 😊
+- Respondes preguntas fuera de tema brevemente y luego vuelves a centrar la conversación
+- Si el usuario bromea, puedes seguirle la corriente brevemente y luego volver al proceso
+- Extraes información relevante de las respuestas del usuario sin preguntar mecánicamente
+- Nunca preguntas por información que ya has recibido
+- No suenas como un formulario o un bot automatizado, sino como un asistente humano y cercano
+- Si conoces el nombre del paciente de la fórmula, lo usas para personalizar la conversación
+
 MANEJO DE PRIMERA INTERACCIÓN:
 - Si es la primera vez que interactúas con el usuario, SIEMPRE debes saludar primero antes de pedir cualquier información
 - Si el usuario envía una foto de la fórmula como primer mensaje, primero saluda y preséntate, luego solicita autorización
@@ -43,46 +56,8 @@ REGLAS CRÍTICAS:
 4. Cuando el usuario diga que no tiene la fórmula, explica las opciones para obtenerla: solicitar duplicado en EPS, consultar historial médico en línea, o contactar al médico.
 5. Si conoces el nombre del paciente desde la fórmula, dirígete a él/ella por su nombre de pila al inicio de tus mensajes.
 
-PERSONALIDAD:
-- Eres conversacional, amable y empático. Usas emojis ocasionalmente para dar un tono amigable 😊
-- Respondes preguntas fuera de tema brevemente y luego vuelves a centrar la conversación
-- Si el usuario bromea, puedes seguirle la corriente brevemente y luego volver al proceso
-- Extraes información relevante de las respuestas del usuario sin preguntar mecánicamente
-- Nunca preguntas por información que ya has recibido
-- No suenas como un formulario o un bot automatizado, sino como un asistente humano y cercano
-- Si conoces el nombre del paciente de la fórmula, lo usas para personalizar la conversación
-
 OBJETIVO:
 Tu objetivo es ayudar al usuario a radicar una queja por medicamentos no entregados por su EPS, recopilando toda la información necesaria de manera natural y conversacional.
-
-ETAPA ACTUAL DE LA CONVERSACIÓN: {current_step}
-
-FLUJO DE CONVERSACIÓN:
-Sigue este flujo para recopilar la información, pero mantén un tono natural y conversacional:
-
-1. Cuando recibas la fórmula y el usuario te autorice, muestra el resumen de la fórmula y pregunta qué medicamentos no le entregaron.
-
-2. Después de saber los medicamentos no entregados, pregunta "¿En qué ciudad te entregan tus medicamentos? 🏙️"
-
-3. Después, pregunta por el número de celular: "¿Cuál es tu número de celular? 📱"
-
-4. Luego, pregunta por la fecha de nacimiento: "¿Cuál es tu fecha de nacimiento? 📅" (acepta cualquier formato de fecha)
-
-5. Después, pregunta por el régimen de afiliación: "¿Cuál es tu régimen de afiliación? ¿Es contributivo o subsidiado?"
-
-6. Luego, pregunta por la dirección de residencia: "¿Podrías indicarme tu dirección de residencia? 🏠"
-
-7. Finalmente, pregunta por la farmacia: "¿En qué farmacia y sede debían entregarte el medicamento? 🏥"
-
-8. Cuando tengas toda la información, genera un resumen completo y confirma que tramitarás la queja en las próximas 24 horas.
-
-PAUTAS IMPORTANTES:
-- Para cada dato que el usuario te proporcione, confirma brevemente que lo has recibido antes de pasar a la siguiente pregunta
-- Si el usuario proporciona varios datos a la vez, procésalos todos y continúa con lo siguiente que falte
-- Acepta cualquier formato de fecha, dirección y otros datos
-- Si el usuario dice que no le entregaron ningún medicamento o todos, acepta esa respuesta
-- Sé conversacional pero también eficiente, manteniendo el flujo
-- Si conoces al paciente por su nombre de la fórmula, úsalo en tus respuestas
 
 INFORMACIÓN A RECOPILAR:
 - Medicamentos no entregados
@@ -92,6 +67,20 @@ INFORMACIÓN A RECOPILAR:
 - Régimen de afiliación (Contributivo o Subsidiado)
 - Dirección de residencia
 - Farmacia y sede donde debían entregarle los medicamentos
+
+FLUJO CONVERSACIONAL INTELIGENTE:
+1. Cuando recibas la fórmula y el usuario te autorice, muestra el resumen de la fórmula y pregunta qué medicamentos no le entregaron.
+2. Después de saber los medicamentos no entregados, pregunta por la ciudad.
+3. Luego pregunta por el número de celular, fecha de nacimiento, régimen de afiliación, dirección de residencia y farmacia.
+4. Cuando tengas toda la información, genera un resumen completo y confirma que tramitarás la queja en las próximas 24 horas.
+
+PAUTAS IMPORTANTES:
+- Para cada dato que el usuario te proporcione, confirma brevemente que lo has recibido antes de pasar a la siguiente pregunta
+- Si el usuario proporciona varios datos a la vez, procésalos todos y continúa con lo siguiente que falte
+- Acepta cualquier formato de fecha, dirección y otros datos
+- Si el usuario dice que no le entregaron ningún medicamento o todos, acepta esa respuesta
+- Sé conversacional pero también eficiente, manteniendo el flujo
+- Si conoces al paciente por su nombre de la fórmula, úsalo en tus respuestas
 
 RESUMEN FINAL:
 Cuando tengas toda la información, presenta un resumen así:
@@ -105,30 +94,13 @@ Aquí tienes un resumen de la información que has proporcionado:
 - *Régimen:* [RÉGIMEN]
 - *Dirección:* [DIRECCIÓN]
 En las próximas 24 horas, tramitaremos tu queja ante la EPS y te enviaré el número de radicado por este mismo chat. 📄 ¿Hay algo más en lo que pueda ayudarte? 😊"
-
-Si el usuario dice que no necesita nada más, despídete amablemente indicando que le enviarás el número de radicado pronto.
 """
 
-        # Añadir instrucciones específicas para el paso actual
-        system_prompt += self._get_step_specific_instructions(user_data, current_step)
-        
         return system_prompt
     
     def _build_user_context(self, user_data: Dict[str, Any]) -> str:
         """Construye un contexto detallado con la información disponible del usuario"""
         
-        # Identificar qué información tenemos y cuál falta
-        tiene_info = {
-            "city": bool(user_data.get("city")),
-            "missing_meds": bool(user_data.get("missing_meds") and user_data.get("missing_meds") != "[aún no especificado]"),
-            "cellphone": bool(user_data.get("cellphone")),
-            "birth_date": bool(user_data.get("birth_date")),
-            "affiliation_regime": bool(user_data.get("affiliation_regime")),
-            "residence_address": bool(user_data.get("residence_address")),
-            "pharmacy": bool(user_data.get("pharmacy")),
-        }
-        
-        # Construir contexto de usuario
         context = "INFORMACIÓN DEL USUARIO:\n"
         
         if user_data.get("name"):
@@ -158,29 +130,68 @@ Si el usuario dice que no necesita nada más, despídete amablemente indicando q
         if user_data.get("cellphone"):
             context += f"- Celular: {user_data.get('cellphone')}\n"
         
+        # Añadir estado de la conversación
+        context += f"\nESTADO DE LA CONVERSACIÓN:\n"
+        context += f"- Primera interacción: {'Sí' if user_data.get('is_first_interaction', True) else 'No'}\n"
+        context += f"- Ha saludado: {'Sí' if user_data.get('has_greeted') else 'No'}\n"
+        context += f"- Consentimiento para procesar datos: {'Sí' if user_data.get('consented') else 'No'}\n"
+        context += f"- Proceso completado: {'Sí' if user_data.get('process_completed') else 'No'}\n"
+        
         # Añadir información sobre lo que falta recopilar
         context += "\nINFORMACIÓN PENDIENTE POR RECOPILAR:\n"
         
-        if not tiene_info["missing_meds"]:
+        if not user_data.get("formula_data"):
+            context += "- Fórmula médica\n"
+            
+        if not user_data.get("consented"):
+            context += "- Consentimiento para procesar datos\n"
+            
+        if not user_data.get("missing_meds") or user_data.get("missing_meds") == "[aún no especificado]":
             context += "- Medicamentos no entregados\n"
             
-        if not tiene_info["city"]:
+        if not user_data.get("city"):
             context += "- Ciudad\n"
             
-        if not tiene_info["cellphone"]:
+        if not user_data.get("cellphone"):
             context += "- Número de celular\n"
             
-        if not tiene_info["birth_date"]:
+        if not user_data.get("birth_date"):
             context += "- Fecha de nacimiento\n"
             
-        if not tiene_info["affiliation_regime"]:
+        if not user_data.get("affiliation_regime"):
             context += "- Régimen de afiliación\n"
             
-        if not tiene_info["residence_address"]:
+        if not user_data.get("residence_address"):
             context += "- Dirección\n"
             
-        if not tiene_info["pharmacy"]:
+        if not user_data.get("pharmacy"):
             context += "- Farmacia\n"
+        
+        # Determinar próximo paso
+        context += "\nPRÓXIMA ACCIÓN:\n"
+        
+        if not user_data.get("has_greeted", False):
+            context += "- Saludar al usuario\n"
+        elif not user_data.get("formula_data"):
+            context += "- Solicitar foto de fórmula médica\n"
+        elif not user_data.get("consented"):
+            context += "- Solicitar consentimiento para procesar datos\n"
+        elif not user_data.get("missing_meds") or user_data.get("missing_meds") == "[aún no especificado]":
+            context += "- Preguntar medicamentos no entregados\n"
+        elif not user_data.get("city"):
+            context += "- Preguntar ciudad\n"
+        elif not user_data.get("cellphone"):
+            context += "- Preguntar número de celular\n"
+        elif not user_data.get("birth_date"):
+            context += "- Preguntar fecha de nacimiento\n"
+        elif not user_data.get("affiliation_regime"):
+            context += "- Preguntar régimen de afiliación\n"
+        elif not user_data.get("residence_address"):
+            context += "- Preguntar dirección\n"
+        elif not user_data.get("pharmacy"):
+            context += "- Preguntar farmacia\n"
+        else:
+            context += "- Presentar resumen final\n"
             
         return context
     
@@ -207,38 +218,3 @@ Si el usuario dice que no necesita nada más, despídete amablemente indicando q
                 context += f"  {i+1}. {med}\n"
                 
         return context
-    
-    def _get_step_specific_instructions(self, user_data: Dict[str, Any], current_step: str) -> str:
-        """Proporciona instrucciones específicas basadas en el paso actual de la conversación"""
-        
-        if current_step == "ESPERANDO_FORMULA":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pide amablemente al usuario que envíe una foto de su fórmula médica."
-            
-        elif current_step == "ESPERANDO_CONSENTIMIENTO":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Estás esperando que el usuario te dé su consentimiento para procesar sus datos. No analices la fórmula ni hagas más preguntas hasta que el usuario autorice."
-            
-        elif current_step == "ESPERANDO_MEDICAMENTOS":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario qué medicamentos de la fórmula no le fueron entregados. Acepta respuestas como 'todos', 'ninguno', números o nombres."
-            
-        elif current_step == "ESPERANDO_CIUDAD":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿En qué ciudad te entregan tus medicamentos? 🏙️'"
-                
-        elif current_step == "ESPERANDO_CELULAR":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿Cuál es tu número de celular? 📱'"
-                
-        elif current_step == "ESPERANDO_FECHA_NACIMIENTO":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿Cuál es tu fecha de nacimiento? 📅' y acepta cualquier formato."
-                
-        elif current_step == "ESPERANDO_REGIMEN":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿Cuál es tu régimen de afiliación? ¿Es contributivo o subsidiado?'"
-                
-        elif current_step == "ESPERANDO_DIRECCION":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿Podrías indicarme tu dirección de residencia? 🏠'"
-                
-        elif current_step == "ESPERANDO_FARMACIA":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Pregunta al usuario '¿En qué farmacia y sede debían entregarte el medicamento? 🏥'"
-                
-        elif current_step == "COMPLETADO":
-            return "\nINSTRUCCIONES ESPECÍFICAS: Presenta el resumen final con todos los datos y confirma que la queja será tramitada en las próximas 24 horas."
-            
-        return ""

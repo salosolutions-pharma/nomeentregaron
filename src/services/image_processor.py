@@ -34,7 +34,7 @@ IMPORTANTE - Extrae ABSOLUTAMENTE TODOS los medicamentos y sus dosis como están
 
 Si algún campo no se puede leer, indica "No visible".
 
-Devuelve un objeto JSON con esta estructura exacta:
+RESPONDE ÚNICAMENTE CON UN OBJETO JSON CON EXACTAMENTE ESTA ESTRUCTURA:
 {
   "datos": {
     "tipo_documento": "tipo de documento (CC, TI, etc.)",
@@ -48,9 +48,9 @@ Devuelve un objeto JSON con esta estructura exacta:
   }
 }
 
-Asegúrate de incluir todos los medicamentos visibles en la imagen, sin excepción."""
+No incluyas explicaciones, análisis ni texto adicional fuera del JSON. La respuesta debe ser únicamente el objeto JSON."""
 
-            # Llamamos a la API de OpenAI sin especificar el límite de tokens
+            # Llamamos a la API de OpenAI 
             response = self.client.chat.completions.create(
                 model="o4-mini",
                 messages=[
@@ -68,35 +68,81 @@ Asegúrate de incluir todos los medicamentos visibles en la imagen, sin excepci�
                         ]
                     }
                 ]
-                # Eliminamos el parámetro max_tokens/max_completion_tokens
             )
             
             response_text = response.choices[0].message.content
+            logger.info(f"Respuesta de OpenAI Vision recibida. Longitud: {len(response_text)}")
             
+            # Intenta encontrar un JSON válido en la respuesta
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if not json_match:
-                raise ValueError("No se encontró un formato JSON válido")
+                # Si no encuentra JSON, intenta crear un JSON básico con los datos que podamos extraer
+                logger.warning("No se encontró un formato JSON válido en la respuesta. Intentando extraer información manualmente.")
+                
+                # Patrones para extraer información básica
+                paciente_match = re.search(r'paciente[:\s]+"([^"]+)"', response_text, re.I)
+                medicamentos_match = re.findall(r'medicamento[s]?[:\s]+([^\n\."]+)', response_text, re.I)
+                
+                # Crear un JSON básico con la información que podamos extraer
+                datos = {
+                    "paciente": paciente_match.group(1) if paciente_match else "No visible",
+                    "tipo_documento": "No visible",
+                    "numero_documento": "No visible",
+                    "fecha_atencion": "No visible",
+                    "eps": "No visible",
+                    "doctor": "No visible",
+                    "diagnostico": "No visible",
+                    "medicamentos": medicamentos_match if medicamentos_match else ["No se detectaron medicamentos"]
+                }
+                
+                return {"datos": datos}
             
-            json_data = json.loads(json_match.group(0))
+            # Si encontramos un JSON, lo analizamos
+            try:
+                json_data = json.loads(json_match.group(0))
+            except json.JSONDecodeError:
+                # Si el JSON no es válido, intentamos limpiarlo
+                cleaned_json = json_match.group(0).replace('\n', '').replace('\r', '')
+                # Reemplazar dobles comillas dentro de valores
+                cleaned_json = re.sub(r'(?<=":\s*"[^"]*)"(?=[^"]*")', '\\"', cleaned_json)
+                json_data = json.loads(cleaned_json)
             
             if "datos" not in json_data:
-                raise ValueError("Estructura JSON incorrecta")
+                # Si el JSON no tiene la estructura esperada, la creamos
+                if any(key in json_data for key in ["tipo_documento", "paciente", "medicamentos"]):
+                    json_data = {"datos": json_data}
+                else:
+                    raise ValueError("Estructura JSON incorrecta")
             
             datos = json_data["datos"]
             
+            # Asegurarnos de que medicamentos sea una lista
             if not isinstance(datos.get("medicamentos", []), list):
                 if isinstance(datos.get("medicamentos"), str):
                     datos["medicamentos"] = [datos["medicamentos"]]
                 else:
                     datos["medicamentos"] = ["No se detectaron medicamentos"]
             
+            # Si no hay medicamentos detectados, añadir un mensaje genérico
             if (len(datos.get("medicamentos", [])) == 0 or
                     (len(datos.get("medicamentos", [])) == 1 and 
                     datos["medicamentos"][0] == "No se detectaron medicamentos")):
-                raise ValueError("No se detectaron medicamentos en la fórmula")
+                datos["medicamentos"] = ["No se detectaron medicamentos claramente. Por favor, intenta con una foto más clara."]
             
             return {"datos": datos}
             
         except Exception as e:
             logger.error(f"Error en process_medical_formula: {e}")
-            raise
+            # Devolver datos básicos para que el bot pueda continuar
+            return {
+                "datos": {
+                    "paciente": "No visible",
+                    "tipo_documento": "No visible",
+                    "numero_documento": "No visible",
+                    "fecha_atencion": "No visible",
+                    "eps": "No visible",
+                    "doctor": "No visible",
+                    "diagnostico": "No visible",
+                    "medicamentos": ["No se pudo procesar la fórmula correctamente. Por favor, intenta con una foto más clara."]
+                }
+            }
